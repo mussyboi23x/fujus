@@ -1501,9 +1501,8 @@ let leftTouch = false;
 let rightTouch = false;
 
 function updateMobileKeys() {
-    // Drive forward if either side is touched
-	const oneSideOnly = touchLeft !== touchRight;
-    inputs.up = oneSideOnly;
+    // Drive forward if either side is 
+    inputs.up = leftTouch || rightTouch;
 	inputs.down = leftTouch && rightTouch;
 
     // Steering
@@ -1581,6 +1580,7 @@ window.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
 
 
 
