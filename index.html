@@ -21,6 +21,25 @@
         #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 24px; }
     </style>
 	<style>
+    /* Disable text selection everywhere */
+    * {
+        -webkit-user-select: none;   /* iPad / Safari */
+        -webkit-touch-callout: none; /* Disable long‑press menu */
+        user-select: none;           /* Standard */
+    }
+
+    /* Remove Safari tap highlight */
+    body {
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Optional: stop scrolling / pinch zoom */
+    html, body {
+        touch-action: none;
+    }
+</style>
+
+	<style>
     .touch-zone {
         position: fixed;
         top: 0;
@@ -1598,6 +1617,7 @@ window.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
 
 
 
