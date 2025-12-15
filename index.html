@@ -1539,46 +1539,58 @@ const FreeBtn = document.getElementById('FreeplayBtn');
 const botBtn = document.getElementById('1v1Btn')
 const settingsBtn = document.getElementById('settingsBtn');
 const quitBtn = document.getElementById('quitBtn');
+	let joyActive = false;
+let joyStartX = 0;
+let joyStartY = 0;
 
-const leftZone = document.getElementById("left-zone");
-const rightZone = document.getElementById("right-zone");
+const joystick = document.getElementById("joystick");
+const stick = document.getElementById("stick");
 
-let leftTouch = false;
-let rightTouch = false;
-
-function updateMobileKeys() {
-    // Drive forward if either side is 
-    inputs.up = leftTouch || rightTouch;
-	inputs.down = leftTouch && rightTouch;
-
-    // Steering
-    inputs.left = leftTouch;
-    inputs.right = rightTouch;
-}
-
-// Touch start
-leftZone.addEventListener("touchstart", () => {
-    leftTouch = true;
-    updateMobileKeys();
-});
-rightZone.addEventListener("touchstart", () => {
-    rightTouch = true;
-    updateMobileKeys();
+joystick.addEventListener("touchstart", (e) => {
+    const t = e.touches[0];
+    joyActive = true;
+    joyStartX = t.clientX;
+    joyStartY = t.clientY;
 });
 
-// Touch end
-leftZone.addEventListener("touchend", () => {
-    leftTouch = false;
-    updateMobileKeys();
-});
-rightZone.addEventListener("touchend", () => {
-    rightTouch = false;
-    updateMobileKeys();
+joystick.addEventListener("touchmove", (e) => {
+    if (!joyActive) return;
+
+    const t = e.touches[0];
+    const dx = t.clientX - joyStartX;
+    const dy = t.clientY - joyStartY;
+
+    // Limit stick movement
+    const maxDist = 50;
+    const dist = Math.min(maxDist, Math.hypot(dx, dy));
+    const angle = Math.atan2(dy, dx);
+
+    const stickX = Math.cos(angle) * dist;
+    const stickY = Math.sin(angle) * dist;
+
+    stick.style.transform = `translate(${stickX}px, ${stickY}px)`;
+
+    // NORMALIZED INPUTS
+    const nx = stickX / maxDist; // -1 to 1
+    const ny = stickY / maxDist; // -1 to 1
+
+    // Convert joystick to your inputs
+    inputs.left = nx < -0.3;
+    inputs.right = nx > 0.3;
+    inputs.up = ny < -0.3;
+    inputs.down = ny > 0.3;
 });
 
-// Prevent scrolling
-leftZone.addEventListener("touchmove", e => e.preventDefault());
-rightZone.addEventListener("touchmove", e => e.preventDefault());
+joystick.addEventListener("touchend", () => {
+    joyActive = false;
+    stick.style.transform = "translate(-50%, -50%)";
+
+    inputs.left = false;
+    inputs.right = false;
+    inputs.up = false;
+    inputs.down = false;
+});
+
 
 FreeBtn.addEventListener('click', () => {
     menuOverlay.style.display = 'none';
@@ -1626,6 +1638,7 @@ window.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
 
 
 
