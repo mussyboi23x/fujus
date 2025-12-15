@@ -23,11 +23,11 @@
 </head>
 <body>
 
-<!-- Add this inside <body>, above your #info div -->
 <div id="menuOverlay">
     <div id="menuBox">
         <h1>Pocket League</h1>
-        <button id="startGameBtn">Start Game</button>
+        <button id="FreeplayBtn">Freeplay</button>
+	<button id="1v1Btn">Bot 1v1</button>
         <button id="settingsBtn">Settings</button>
         <button id="quitBtn">Quit</button>
     </div>
@@ -124,6 +124,17 @@
     let REPLAY_LENGTH = 5; // seconds to replay
     let REPLAY_FPS = 60;   // how many frames per second
     let gameStarted = false;
+let botBody, botMesh;
+let gameMode = 'freeplay';
+
+let botInputs = {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    shift: false
+};
+
 
 
 
@@ -436,6 +447,117 @@
         scene.add(carMesh);
     }
 
+function createBotCar() {
+    const shape = new CANNON.Box(
+        new CANNON.Vec3(CAR_SIZE.w, CAR_SIZE.h, CAR_SIZE.l)
+    );
+
+    botBody = new CANNON.Body({
+        mass: 150 * SCALE_FACTOR,
+        material: physicsMaterials.object
+    });
+
+    botBody.addShape(shape);
+    botBody.position.set(0, 2, -FIELD_L * 0.3); // Correct physics spawn
+    botBody.linearDamping = 0.01;
+    botBody.angularDamping = 0.9;
+    world.addBody(botBody);
+
+    // MESH SETUP (Added roof and wheels for visibility)
+    botMesh = new THREE.Group();
+
+    const bodyGeo = new THREE.BoxGeometry(
+        CAR_SIZE.w * 2,
+        CAR_SIZE.h * 2,
+        CAR_SIZE.l * 2
+    );
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xFF8833 }); // Orange color
+    const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+    bodyMesh.castShadow = true;
+    botMesh.add(bodyMesh);
+    
+    // Add Roof
+    const roofGeo = new THREE.BoxGeometry(3.5, 0.5, 2);
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x222222 }); 
+    const roof = new THREE.Mesh(roofGeo, roofMat);
+    roof.position.y = 1;
+    roof.position.z = -1;
+    botMesh.add(roof);
+
+    // Add Wheels
+    const wheelGeo = new THREE.CylinderGeometry(0.8, 0.8, 0.5, 12);
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+    const positions = [[-2, -1, 2], [2, -1, 2], [-2, -1, -2], [2, -1, -2]];
+    positions.forEach(pos => {
+        const w = new THREE.Mesh(wheelGeo, wheelMat);
+        w.rotation.z = Math.PI / 2;
+        w.position.set(...pos);
+        botMesh.add(w);
+    });
+
+    scene.add(botMesh);
+}
+
+function applyCarControls(body, controlInputs) {
+    const isCarOnGround = body.position.y < (CAR_SIZE.h * 1.5);
+    const forwardVector = new CANNON.Vec3(0, 0, -1);
+    const rotatedForward = body.quaternion.vmult(forwardVector);
+
+    // 1. Movement Logic (Accelerates the car in its forward direction)
+    let targetSpeed = 0;
+    if (controlInputs.up) {
+        targetSpeed = BASE_SPEED;
+    } else if (controlInputs.down) {
+        targetSpeed = -BASE_SPEED * 0.5;
+    }
+
+    const targetVelocity = rotatedForward.scale(targetSpeed);
+    const accelFactor = 0.05;
+
+    // Smoothly apply acceleration
+    body.velocity.x = body.velocity.x * (1 - accelFactor) + targetVelocity.x * accelFactor;
+    body.velocity.z = body.velocity.z * (1 - accelFactor) + targetVelocity.z * accelFactor;
+
+    // 2. Boost as Velocity Addition
+    if (controlInputs.shift) {
+        const boostImpulse = rotatedForward.scale(BOOST_VELOCITY_ADD);
+        body.velocity.vadd(boostImpulse, body.velocity);
+    }
+    
+    // 3. Ground Steering (Yaw rotation)
+    if (isCarOnGround) {
+        const steer = (controlInputs.left ? 1 : 0) - (controlInputs.right ? 1 : 0);
+
+        if (steer !== 0) {
+            const speed = Math.sqrt(
+                body.velocity.x ** 2 +
+                body.velocity.z ** 2
+            );
+
+            if (speed > 0.2) {
+                const turnStrength = TURN_RATE * (speed / BASE_SPEED);
+
+                const rot = new CANNON.Quaternion();
+                rot.setFromAxisAngle(
+                    new CANNON.Vec3(0, 1, 0),
+                    steer * turnStrength
+                );
+
+                body.quaternion = rot.mult(body.quaternion);
+            }
+        }
+
+        // 4. Ground Grip (Dampens side slide)
+        const rightVector = body.quaternion.vmult(new CANNON.Vec3(1, 0, 0));
+        const sideSpeed = body.velocity.dot(rightVector);
+        const SIDE_GRIP = 0.8; 
+        body.velocity.vsub(
+            rightVector.scale(sideSpeed * SIDE_GRIP),
+            body.velocity
+        );
+    }
+}
+
     function createBall() {
         const shape = new CANNON.Sphere(BALL_RADIUS);
         ballBody = new CANNON.Body({ mass: 10 * SCALE_FACTOR, material: physicsMaterials.object });
@@ -589,6 +711,13 @@ if (inputs.up) {                 // front flip
         ballBody.position.set(0, BALL_RADIUS * 2, 0); 
         ballBody.velocity.set(0, 0, 0);
         ballBody.angularVelocity.set(0, 0, 0);
+
+        if (botBody) {
+             botBody.position.set(0, 2, -FIELD_L * 0.3);
+             botBody.velocity.set(0, 0, 0);
+             botBody.quaternion.set(0, 0, 0, 1);
+             botBody.angularVelocity.set(0, 0, 0);
+        }
         
        isFlipping = false;
        flipTimer = 0;
@@ -710,6 +839,93 @@ function score(team) {
         }
     }
 
+function applyCarControls(body, controlInputs) {
+    const isCarOnGround = body.position.y < (CAR_SIZE.h * 1.5);
+
+    // 1. GROUND STEERING (ONLY SOURCE OF YAW)
+    if (isCarOnGround) {
+        const steer =
+            (controlInputs.left ? 1 : 0) -
+            (controlInputs.right ? 1 : 0);
+
+        if (steer !== 0) {
+            const speed = Math.sqrt(
+                body.velocity.x ** 2 +
+                body.velocity.z ** 2
+            );
+
+            if (speed > 0.2) {
+                const turnStrength = TURN_RATE * (speed / BASE_SPEED);
+
+                const rot = new CANNON.Quaternion();
+                rot.setFromAxisAngle(
+                    new CANNON.Vec3(0, 1, 0),
+                    steer * turnStrength
+                );
+
+                body.quaternion = rot.mult(body.quaternion);
+            }
+        }
+    }
+
+    // 2. Movement Logic (Ground Speed)
+    const forwardVector = new CANNON.Vec3(0, 0, -1);
+    const rotatedForward = body.quaternion.vmult(forwardVector);
+
+    let targetSpeed = 0;
+    if (controlInputs.up) {
+        targetSpeed = BASE_SPEED;
+    } else if (controlInputs.down) {
+        targetSpeed = -BASE_SPEED * 0.5;
+    }
+
+    const targetVelocity = rotatedForward.scale(targetSpeed);
+    const accelFactor = 0.05;
+
+    body.velocity.x = body.velocity.x * (1 - accelFactor) + targetVelocity.x * accelFactor;
+    body.velocity.z = body.velocity.z * (1 - accelFactor) + targetVelocity.z * accelFactor;
+
+    // ROCKET LEAGUE GROUND GRIP (kills side slide)
+    if (isCarOnGround) {
+        const rightVector = body.quaternion.vmult(new CANNON.Vec3(1, 0, 0));
+        const sideSpeed = body.velocity.dot(rightVector);
+
+        const SIDE_GRIP = 0.8; // increase = more grip
+        body.velocity.vsub(
+            rightVector.scale(sideSpeed * SIDE_GRIP),
+            body.velocity
+        );
+    }
+
+    // 3. Boost as Velocity Addition
+    if (controlInputs.shift) {
+        const boostImpulse = rotatedForward.scale(BOOST_VELOCITY_ADD);
+        body.velocity.vadd(boostImpulse, body.velocity);
+    }
+
+    // 5. Anti-Roll/Stabilization (Simplified for the bot)
+    if (isCarOnGround) {
+        const carUp = new CANNON.Vec3();
+        body.quaternion.vmult(new CANNON.Vec3(0, 1, 0), carUp);
+
+        const upVector = new CANNON.Vec3(0, 1, 0);
+        const correctionTorque = new CANNON.Vec3();
+        carUp.cross(upVector, correctionTorque);
+
+        const dot = carUp.dot(new CANNON.Vec3(0,1,0));
+        const angleFromUp = Math.acos(Math.min(Math.max(dot, -1), 1));
+        const uprightTorque = 50;
+        
+        if (angleFromUp > 0.05) {
+             body.angularVelocity.vadd(
+                correctionTorque.scale(angleFromUp > Math.PI / 3 ? uprightTorque : 0.5),
+                body.angularVelocity
+             );
+        }
+    }
+}
+// <<< ADDED FUNCTION FOR BOT CONTROL >>>
+
 function updatePhysics() {
     if (gameState !== 'playing') return;
 
@@ -730,7 +946,6 @@ function updatePhysics() {
 if (carBody.velocity.y < 0) {
     carBody.velocity.y *= (1 - bounceDamp);
 } 
-// DO NOT clamp upward velocity — jump needs it
 
     }
 
@@ -877,7 +1092,7 @@ if (isCarOnGround) {
         carBody.velocity.z * right.z;
 
     // Only damp sideways slide, never cancel it
-    const grip = 0.25; // start low (0.2–0.35)
+    const grip = 0.25; // start low (0.2â0.35)
 
     carBody.velocity.x -= right.x * lateralSpeed * grip;
     carBody.velocity.z -= right.z * lateralSpeed * grip;
@@ -1090,17 +1305,125 @@ function animate() {
         updatePhysics();
         checkGoal();
         recordReplayFrame();
+
+        if (gameMode === 'bot1v1') {
+            updateBotAI();
+            // <<< SYNTAX ERROR FIXED HERE - Moved applyCarControls into animate else block >>>
+            applyCarControls(botBody, botInputs);
+        }
     }
 
     carMesh.position.copy(carBody.position);
     carMesh.quaternion.copy(carBody.quaternion);
     ballMesh.position.copy(ballBody.position);
     ballMesh.quaternion.copy(ballBody.quaternion);
+    
+    if (botMesh) {
+        botMesh.position.copy(botBody.position);
+        botMesh.quaternion.copy(botBody.quaternion);
+    }
+
 
     updateCamera();
     renderer.render(scene, camera);
-}
+} // <<< The missing brace was here in the original code but now it's correctly placed at the end. >>>
 
+function updateBotAI() {
+    if (!botBody || gameMode !== 'bot1v1') return;
+
+    // Reset bot inputs
+    botInputs.up = false;
+    botInputs.down = false;
+    botInputs.left = false;
+    botInputs.right = false;
+    botInputs.shift = false;
+
+    // --- CONSTANTS & VECTORS ---
+    
+    // Orange Bot Goal Line (Z position the bot needs to defend)
+    const ORANGE_GOAL_LINE_Z = FIELD_L * 0.3; 
+    // Blue Goal Line (Z position the bot needs to attack)
+    const BLUE_GOAL_LINE_Z = -FIELD_L * 0.3; 
+
+    const BOT_Z = botBody.position.z;
+    const BOT_X = botBody.position.x;
+
+    // Vector from bot to ball (XZ plane only)
+    const toBall = new CANNON.Vec3(
+        ballBody.position.x - BOT_X,
+        0,
+        ballBody.position.z - BOT_Z
+    );
+    const toBallLength = toBall.length();
+
+    // Get the bot's current forward direction (XZ plane only)
+    const forward = botBody.quaternion.vmult(new CANNON.Vec3(0, 0, -1));
+    forward.y = 0;
+    forward.normalize();
+
+    // Angle between forward direction and vector to ball (Angle of error)
+    const angleToBall =
+        Math.atan2(
+            forward.x * toBall.z - forward.z * toBall.x,
+            forward.x * toBall.x + forward.z * toBall.z
+        );
+        
+    // --- 1. WALL AVOIDANCE (Unsticking) ---
+    // The previous fix: check if bot is past the opponent's goal line AND pushing into the wall
+    const isStuckAtWall = (BOT_Z < BLUE_GOAL_LINE_Z - 5) && (forward.z < -0.5);
+
+    if (isStuckAtWall) {
+        // Reverse to unstick
+        botInputs.down = true; 
+        botInputs.left = false;
+        botInputs.right = false;
+        return; // Exit AI logic this frame to focus on unsticking
+    }
+
+    // --- 2. CORE CHASE LOGIC ---
+
+    // The preferred position is behind the ball (closer to the bot's own goal, +Z side)
+    const desiredZ = ballBody.position.z + 5; // Target slightly past the ball towards its goal
+    
+    // Check if the bot is on the wrong side of the ball (closer to the Blue goal/back of the ball)
+    const isBehindBall = BOT_Z > ballBody.position.z; 
+
+    if (isBehindBall) {
+        // Attack Mode: Drive straight toward the ball
+        
+        // Steering: Adjust angle to point towards the ball
+        if (angleToBall > 0.1) botInputs.left = true;
+        else if (angleToBall < -0.1) botInputs.right = true;
+        
+        // Drive: Go forward
+        botInputs.up = true;
+        
+    } else {
+        // Positional Correction: Bot is too far forward (closer to the Blue goal than the ball)
+
+        // Target: Move back to the desired Z-position behind the ball
+        const toDesiredPos = new CANNON.Vec3(0, 0, desiredZ - BOT_Z); 
+        
+        // Calculate the angle to face the desired position 
+        const angleToDesiredPos =
+            Math.atan2(
+                forward.x * toDesiredPos.z - forward.z * toDesiredPos.x,
+                forward.x * toDesiredPos.x + forward.z * toDesiredPos.z
+            );
+            
+        // Steering: Turn toward the desired Z position (away from the ball)
+        if (angleToDesiredPos > 0.1) botInputs.left = true;
+        else if (angleToDesiredPos < -0.1) botInputs.right = true;
+
+        // Drive: Reverse to get behind the ball
+        botInputs.down = true;
+    }
+    
+    // --- 3. BOOST ---
+    if (toBallLength > 60 && botInputs.up) { // Only boost if driving forward and far
+        botInputs.shift = true;
+    }
+}
 function recordReplayFrame() {
     if (gameState !== 'playing') return;
 
@@ -1118,6 +1441,14 @@ function recordReplayFrame() {
             // add more cars here if needed
         ]
     };
+    
+    if (gameMode === 'bot1v1' && botBody) {
+        frame.cars.push({
+            pos: botBody.position.clone(),
+            quat: botBody.quaternion.clone(),
+        });
+    }
+
 
     replayBuffer.push(frame);
 
@@ -1128,15 +1459,27 @@ function recordReplayFrame() {
 }
 
 const menuOverlay = document.getElementById('menuOverlay');
-const startBtn = document.getElementById('startGameBtn');
+const FreeBtn = document.getElementById('FreeplayBtn');
+const botBtn = document.getElementById('1v1Btn')
 const settingsBtn = document.getElementById('settingsBtn');
 const quitBtn = document.getElementById('quitBtn');
 
-startBtn.addEventListener('click', () => {
+FreeBtn.addEventListener('click', () => {
     menuOverlay.style.display = 'none';
     gameStarted = true;
+    gameMode = 'freeplay';
     resetGame();
 });
+
+botBtn.addEventListener('click', () => {
+    menuOverlay.style.display = 'none';
+    gameStarted = true;
+    gameMode = 'bot1v1';
+
+    if (!botBody) createBotCar();
+    resetGame();
+});
+
 
 settingsBtn.addEventListener('click', () => {
     alert("Settings coming soon!");
