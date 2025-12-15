@@ -1362,98 +1362,123 @@ function updateBotAI() {
     if (!botBody || gameMode !== 'bot1v1') return;
 
     // Reset bot inputs
-    botInputs.up = false;
-    botInputs.down = false;
-    botInputs.left = false;
-    botInputs.right = false;
-    botInputs.shift = false;
+    botInputs.up = botInputs.down = botInputs.left = botInputs.right = botInputs.shift = false;
 
-    // --- CONSTANTS & VECTORS ---
-    
-    // Orange Bot Goal Line (Z position the bot needs to defend)
-    const ORANGE_GOAL_LINE_Z = FIELD_L * 0.3; 
-    // Blue Goal Line (Z position the bot needs to attack)
-    const BLUE_GOAL_LINE_Z = -FIELD_L * 0.3; 
+    // --- CONSTANTS ---
+    const BLUE_GOAL_Z = -FIELD_L * 0.45;   // Bot attacks this
+    const ORANGE_GOAL_Z = FIELD_L * 0.45;  // Bot defends this
+    const BOT_POS = botBody.position;
+    const BALL_POS = ballBody.position;
 
-    const BOT_Z = botBody.position.z;
-    const BOT_X = botBody.position.x;
-
-    // Vector from bot to ball (XZ plane only)
+    // --- BASIC VECTORS ---
     const toBall = new CANNON.Vec3(
-        ballBody.position.x - BOT_X,
+        BALL_POS.x - BOT_POS.x,
         0,
-        ballBody.position.z - BOT_Z
+        BALL_POS.z - BOT_POS.z
     );
-    const toBallLength = toBall.length();
+    const distToBall = toBall.length();
 
-    // Get the bot's current forward direction (XZ plane only)
+    // Bot forward direction
     const forward = botBody.quaternion.vmult(new CANNON.Vec3(0, 0, -1));
     forward.y = 0;
     forward.normalize();
 
-    // Angle between forward direction and vector to ball (Angle of error)
-    const angleToBall =
-        Math.atan2(
-            forward.x * toBall.z - forward.z * toBall.x,
-            forward.x * toBall.x + forward.z * toBall.z
+    // Angle between bot forward and target vector
+    const angleBetween = (targetVec) => {
+        return Math.atan2(
+            forward.x * targetVec.z - forward.z * targetVec.x,
+            forward.x * targetVec.x + forward.z * targetVec.z
         );
-        
-    // --- 1. WALL AVOIDANCE (Unsticking) ---
-    // The previous fix: check if bot is past the opponent's goal line AND pushing into the wall
-    const isStuckAtWall = (BOT_Z < BLUE_GOAL_LINE_Z - 5) && (forward.z < -0.5);
+    };
 
-    if (isStuckAtWall) {
-        // Reverse to unstick
-        botInputs.down = true; 
-        botInputs.left = false;
-        botInputs.right = false;
-        return; // Exit AI logic this frame to focus on unsticking
-    }
+    // Steering helper
+    const steerToward = (angle) => {
+        const DEADZONE = 0.15;
+        if (angle > DEADZONE) botInputs.right = true;
+        else if (angle < -DEADZONE) botInputs.left = true;
+    };
 
-    // --- 2. CORE CHASE LOGIC ---
-
-    // The preferred position is behind the ball (closer to the bot's own goal, +Z side)
-    const desiredZ = ballBody.position.z + 5; // Target slightly past the ball towards its goal
-    
-    // Check if the bot is on the wrong side of the ball (closer to the Blue goal/back of the ball)
-    const isBehindBall = BOT_Z > ballBody.position.z; 
-
-    if (isBehindBall) {
-        // Attack Mode: Drive straight toward the ball
-        
-        // Steering: Adjust angle to point towards the ball
-        if (angleToBall > 0.1) botInputs.left = true;
-        else if (angleToBall < -0.1) botInputs.right = true;
-        
-        // Drive: Go forward
+    // --- 1. WALL AVOIDANCE ---
+    if (Math.abs(BOT_POS.x) > FIELD_W * 0.45) {
+        // Turn inward
+        const target = new CANNON.Vec3(0, 0, BOT_POS.z);
+        const angle = angleBetween(target.vsub(BOT_POS));
+        steerToward(angle);
         botInputs.up = true;
-        
-    } else {
-        // Positional Correction: Bot is too far forward (closer to the Blue goal than the ball)
-
-        // Target: Move back to the desired Z-position behind the ball
-        const toDesiredPos = new CANNON.Vec3(0, 0, desiredZ - BOT_Z); 
-        
-        // Calculate the angle to face the desired position 
-        const angleToDesiredPos =
-            Math.atan2(
-                forward.x * toDesiredPos.z - forward.z * toDesiredPos.x,
-                forward.x * toDesiredPos.x + forward.z * toDesiredPos.z
-            );
-            
-        // Steering: Turn toward the desired Z position (away from the ball)
-        if (angleToDesiredPos > 0.1) botInputs.left = true;
-        else if (angleToDesiredPos < -0.1) botInputs.right = true;
-
-        // Drive: Reverse to get behind the ball
-        botInputs.down = true;
+        return;
     }
-    
-    // --- 3. BOOST ---
-    if (toBallLength > 60 && botInputs.up) { // Only boost if driving forward and far
+
+    // --- 2. KICKOFF LOGIC ---
+    if (distToBall > 40 && Math.abs(BALL_POS.x) < 2) {
+        // Aim directly at ball
+        const angle = angleBetween(toBall);
+        steerToward(angle);
+        botInputs.up = true;
         botInputs.shift = true;
+        return;
+    }
+
+    // --- 3. BEHIND-BALL POSITIONING ---
+    // Compute a point behind the ball toward Blue goal
+    const ballToGoal = new CANNON.Vec3(
+        0 - BALL_POS.x,
+        0,
+        BLUE_GOAL_Z - BALL_POS.z
+    ).unit();
+
+    const approachPoint = new CANNON.Vec3(
+        BALL_POS.x - ballToGoal.x * 6,
+        0,
+        BALL_POS.z - ballToGoal.z * 6
+    );
+
+    const toApproach = new CANNON.Vec3(
+        approachPoint.x - BOT_POS.x,
+        0,
+        approachPoint.z - BOT_POS.z
+    );
+
+    const distToApproach = toApproach.length();
+
+    // --- 4. DEFENSE LOGIC ---
+    const ballIsThreatening = BALL_POS.z > 0; // Ball on bot's half
+    if (ballIsThreatening && distToBall < 25) {
+        // Shadow defend: stay between ball and goal
+        const defendPoint = new CANNON.Vec3(
+            BALL_POS.x * 0.5,
+            0,
+            ORANGE_GOAL_Z * 0.25
+        );
+        const toDefend = defendPoint.vsub(BOT_POS);
+        const angle = angleBetween(toDefend);
+        steerToward(angle);
+        botInputs.up = true;
+        return;
+    }
+
+    // --- 5. APPROACH LOGIC ---
+    if (distToApproach > 4) {
+        // Move to behind-ball point
+        const angle = angleBetween(toApproach);
+        steerToward(angle);
+
+        // Decide forward or reverse
+        if (Math.abs(angle) < Math.PI * 0.6) botInputs.up = true;
+        else botInputs.down = true;
+
+    } else {
+        // --- 6. ATTACK BALL ---
+        const angle = angleBetween(toBall);
+        steerToward(angle);
+        botInputs.up = true;
+
+        // Boost if lined up well
+        if (Math.abs(angle) < 0.25 && distToBall > 10) {
+            botInputs.shift = true;
+        }
     }
 }
+
 function recordReplayFrame() {
     if (gameState !== 'playing') return;
 
@@ -1580,6 +1605,7 @@ window.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
 
 
 
