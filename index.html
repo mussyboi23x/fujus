@@ -194,6 +194,7 @@
     let replayTimer = 0;
     let replayGoalPos = new THREE.Vector3();
     let replayBuffer = [];    // stores recorded frames
+    let replayFrames = [];    // **NEW:** The array used for playback (initialized in score())
     let replayIndex = 0;      // current frame for replay
     let isRecordingReplay = false;
     let isReplaying = false;
@@ -326,6 +327,7 @@ let inputs = {
         body.addShape(shape);
         // Position Y is y + h/2 (where y is the ground level 0)
         body.position.set(x, y + h/2, z);
+        body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), 0); // Ensure orientation is set
         world.addBody(body);
         
         const geo = new THREE.BoxGeometry(w, h, d);
@@ -859,6 +861,9 @@ if (inputs.up || inputs.driveAnalog > 0.5) {                 // front flip
         inputs.D_aerialReady = false;
         inputs.Q_aerialReady = false;
         inputs.E_aerialReady = false;
+        
+        // Clear replay array when game resets
+        replayFrames = [];
     }
 
     function checkGoal() {
@@ -900,10 +905,14 @@ function score(team) {
     // Freeze car motion
     carBody.velocity.set(0, 0, 0);
     carBody.angularVelocity.set(0, 0, 0);
+    if (botBody) {
+        botBody.velocity.set(0, 0, 0);
+        botBody.angularVelocity.set(0, 0, 0);
+    }
 
     // ENTER REPLAY MODE
     ballMesh.visible = true;
-    replayFrames = [...replayBuffer]; // last few seconds
+    replayFrames = [...replayBuffer]; // COPY the last few seconds for playback
     replayIndex = 0;
     replayTimer = 5.1;
     gameState = 'replay';
@@ -984,6 +993,10 @@ function resetCameraInstant() {
     cameraYawDir.set(0, 0, -1);
 }
 
+// Global variable to help smooth camera movement
+let tempCarPos = new THREE.Vector3();
+let tempBallPos = new THREE.Vector3();
+
 function updateCamera(delta) {
     if (!carBody) return;
 
@@ -991,8 +1004,12 @@ function updateCamera(delta) {
     let lookAtPos = new THREE.Vector3();
     
     // Smoothness factor (higher is smoother)
-    const smoothFactor = 8 * delta; 
+    const smoothFactor = 10 * delta; 
     
+    // Lerp the physics position to a temp position to reduce stuttering caused by physics/render mismatch
+    tempCarPos.lerp(carBody.position, smoothFactor);
+    tempBallPos.lerp(ballBody.position, smoothFactor);
+
     if (gameState === 'replay') {
         // Look at the goal explosion point
         lookAtPos.copy(replayGoalPos);
@@ -1006,7 +1023,7 @@ function updateCamera(delta) {
     if (cameraMode === 'car') {
         const CAMERA_DISTANCE = 15 * SCALE_FACTOR;
         const CAMERA_HEIGHT = 5 * SCALE_FACTOR;
-        const CAMERA_OFFSET_Z = 10 * SCALE_FACTOR;
+        const CAMERA_OFFSET_Z = 5 * SCALE_FACTOR; // Look slightly further ahead
         
         // Get car forward direction (CANNON.Vec3)
         const carForward = new CANNON.Vec3(0, 0, -1);
@@ -1014,25 +1031,27 @@ function updateCamera(delta) {
         carForward.y = 0;
         carForward.normalize();
         
-        // --- FIX: Convert CANNON.Vec3 to THREE.Vector3 for position calculation ---
+        // Convert CANNON.Vec3 to THREE.Vector3 for position calculation
         const threeCarForward = new THREE.Vector3(carForward.x, carForward.y, carForward.z);
         
-        // 1. Start targetPos at carBody.position (CANNON to THREE conversion happens via .copy())
-        targetPos.copy(carBody.position); 
+        // 1. Calculate the target position: car position - (forward vector * distance) + (up vector * height)
+        // This is the **original** correct logic, using Three.js vector operations.
+        targetPos.copy(tempCarPos); 
         
-        // 2. Subtract the scaled forward vector (THREE.Vector3.sub is used)
-        targetPos.sub(threeCarForward.multiplyScalar(CAMERA_DISTANCE));
+        // FIX: The previous fix introduced a bug by calling .multiplyScalar() on a temporary vector 
+        // that was also used for lookAtPos calculation. Clone the forward vector before scaling.
+        const cameraOffset = threeCarForward.clone().multiplyScalar(CAMERA_DISTANCE);
+        targetPos.sub(cameraOffset);
         
-        // 3. Set the height
-        targetPos.y = carBody.position.y + CAMERA_HEIGHT;
-        // --- END FIX ---
+        // 2. Set the height
+        targetPos.y = tempCarPos.y + CAMERA_HEIGHT;
         
         // Smoothly move camera
         camera.position.lerp(targetPos, smoothFactor);
         
         // Look at point (slightly in front of the car)
-        const lookAtForward = new THREE.Vector3().copy(carBody.position).add(threeCarForward.multiplyScalar(CAMERA_OFFSET_Z));
-        lookAtPos.copy(lookAtForward);
+        const lookAtOffset = threeCarForward.clone().multiplyScalar(CAMERA_OFFSET_Z);
+        lookAtPos.copy(tempCarPos).add(lookAtOffset);
         
         camera.lookAt(lookAtPos);
 
@@ -1041,20 +1060,20 @@ function updateCamera(delta) {
         const BALL_CAM_HEIGHT = 15 * SCALE_FACTOR;
 
         // Vector from car to ball
-        const toBall = new THREE.Vector3().copy(ballBody.position).sub(carMesh.position);
+        const toBall = new THREE.Vector3().copy(tempBallPos).sub(tempCarPos);
         toBall.y = 0;
         toBall.normalize();
 
         // Target camera position (behind car, offset from the car-to-ball vector)
-        targetPos.copy(carBody.position);
+        targetPos.copy(tempCarPos);
         targetPos.sub(toBall.multiplyScalar(BALL_CAM_DISTANCE));
-        targetPos.y = carBody.position.y + BALL_CAM_HEIGHT;
+        targetPos.y = tempCarPos.y + BALL_CAM_HEIGHT;
 
         // Smoothly move camera
         camera.position.lerp(targetPos, smoothFactor);
 
         // Always look at the ball
-        lookAtPos.copy(ballBody.position);
+        lookAtPos.copy(tempBallPos);
         camera.lookAt(lookAtPos);
     }
 }
@@ -1380,21 +1399,29 @@ function animate() {
     updateGamepad();   // UPDATE GAMEPAD INPUTS
 
     if(gameState === 'replay') {
+        // FIX: Replay now uses the global 'replayFrames' array correctly
         if(replayIndex < replayFrames.length){
             const frame = replayFrames[replayIndex];
             
             // 1. Load Player Car (Index 0)
             carBody.position.copy(frame.cars[0].pos);
             carBody.quaternion.copy(frame.cars[0].quat);
+            // Must update mesh immediately for visual sync during replay
+            carMesh.position.copy(carBody.position); 
+            carMesh.quaternion.copy(carBody.quaternion);
             
             // 2. Load Ball
             ballBody.position.copy(frame.ball.pos);
             ballBody.quaternion.copy(frame.ball.quat);
+            ballMesh.position.copy(ballBody.position);
+            ballMesh.quaternion.copy(ballBody.quaternion);
             
             // 3. Load Bot Car (Index 1)
             if (gameMode === 'bot1v1' && botBody && frame.cars.length > 1) {
                 botBody.position.copy(frame.cars[1].pos); // Bot is always index 1
                 botBody.quaternion.copy(frame.cars[1].quat);
+                botMesh.position.copy(botBody.position);
+                botMesh.quaternion.copy(botBody.quaternion);
             }
             
             replayIndex++;
