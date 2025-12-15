@@ -1295,10 +1295,21 @@ function animate() {
     if(gameState === 'replay') {
         if(replayIndex < replayFrames.length){
             const frame = replayFrames[replayIndex];
+            
+            // 1. Load Player Car (Index 0)
             carBody.position.copy(frame.cars[0].pos);
             carBody.quaternion.copy(frame.cars[0].quat);
+            
+            // 2. Load Ball
             ballBody.position.copy(frame.ball.pos);
             ballBody.quaternion.copy(frame.ball.quat);
+            
+            // 3. Load Bot Car (Index 1) - THE TWEAK
+            if (gameMode === 'bot1v1' && botBody && frame.cars.length > 1) {
+                botBody.position.copy(frame.cars[1].pos);
+                botBody.quaternion.copy(frame.cars[1].quat);
+            }
+            
             replayIndex++;
         }
     } else {
@@ -1308,7 +1319,6 @@ function animate() {
 
         if (gameMode === 'bot1v1') {
             updateBotAI();
-            // <<< SYNTAX ERROR FIXED HERE - Moved applyCarControls into animate else block >>>
             applyCarControls(botBody, botInputs);
         }
     }
@@ -1510,3 +1520,4 @@ window.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
