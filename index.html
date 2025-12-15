@@ -1570,13 +1570,13 @@ let joyCenterY = 0;
 const joystick = document.getElementById("joystick");
 const stick = document.getElementById("stick");
 	
-if (mobileControlsEnabled){
 window.addEventListener("touchstart", (e) => {
+    if (!mobileControlsEnabled) return;
+
     const t = e.touches[0];
 
     joyActive = true;
 
-    // Set joystick center to touch point
     joyCenterX = t.clientX;
     joyCenterY = t.clientY;
 
@@ -1586,7 +1586,7 @@ window.addEventListener("touchstart", (e) => {
 });
 
 window.addEventListener("touchmove", (e) => {
-    if (!joyActive) return;
+    if (!joyActive || !mobileControlsEnabled) return;
 
     const t = e.touches[0];
     const dx = t.clientX - joyCenterX;
@@ -1602,12 +1602,9 @@ window.addEventListener("touchmove", (e) => {
     stick.style.left = (40 + stickX) + "px";
     stick.style.top = (40 + stickY) + "px";
 
-
-    // Normalized -1 to 1
     const nx = stickX / maxDist;
     const ny = stickY / maxDist;
 
-    // Convert to your inputs
     inputs.left = nx < -0.3;
     inputs.right = nx > 0.3;
     inputs.up = ny < -0.3;
@@ -1615,6 +1612,8 @@ window.addEventListener("touchmove", (e) => {
 });
 
 window.addEventListener("touchend", () => {
+    if (!mobileControlsEnabled) return;
+
     joyActive = false;
     joystick.style.display = "none";
 
@@ -1623,7 +1622,7 @@ window.addEventListener("touchend", () => {
     inputs.up = false;
     inputs.down = false;
 });
-}
+
 
 const pauseBtn = document.getElementById("pauseBtn");
 
@@ -1689,6 +1688,7 @@ window.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
 
 
 
