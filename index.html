@@ -1524,7 +1524,17 @@ function updateBotAI() {
     botInputs.shift = true;
 }
 
+function updateMobileControlsVisibility() {
+    const joystick = document.getElementById("joystick");
 
+    if (mobileControlsEnabled) {
+        joystick.style.display = "none"; // hidden until touchstart
+    } else {
+        joystick.style.display = "none"; // fully disabled
+    }
+}
+
+	
 function recordReplayFrame() {
     if (gameState !== 'playing') return;
 
@@ -1689,6 +1699,7 @@ window.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
 
 
 
