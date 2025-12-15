@@ -41,33 +41,33 @@
 
 #joystick {
     position: fixed;
-    bottom: 40px;
-    left: 40px;
     width: 140px;
     height: 140px;
     background: rgba(255,255,255,0.1);
-    border-radius: 50%;
     border: 2px solid rgba(255,255,255,0.2);
+    border-radius: 50%;
+    pointer-events: none;
     touch-action: none;
 }
 
 #stick {
     position: absolute;
-    left: 50%;
-    top: 50%;
     width: 60px;
     height: 60px;
     background: rgba(255,255,255,0.3);
     border-radius: 50%;
+    left: 50%;
+    top: 50%;
     transform: translate(-50%, -50%);
-    touch-action: none;
+    pointer-events: none;
 }
+
 </style>
 
 </head>
 <body>
 
-<div id="joystick">
+<div id="joystick" style="display:none;">
     <div id="stick"></div>
 </div>
 
@@ -1539,28 +1539,34 @@ const FreeBtn = document.getElementById('FreeplayBtn');
 const botBtn = document.getElementById('1v1Btn')
 const settingsBtn = document.getElementById('settingsBtn');
 const quitBtn = document.getElementById('quitBtn');
-	let joyActive = false;
-let joyStartX = 0;
-let joyStartY = 0;
+let joyActive = false;
+let joyCenterX = 0;
+let joyCenterY = 0;
 
 const joystick = document.getElementById("joystick");
 const stick = document.getElementById("stick");
 
-joystick.addEventListener("touchstart", (e) => {
+window.addEventListener("touchstart", (e) => {
     const t = e.touches[0];
+
     joyActive = true;
-    joyStartX = t.clientX;
-    joyStartY = t.clientY;
+
+    // Set joystick center to touch point
+    joyCenterX = t.clientX;
+    joyCenterY = t.clientY;
+
+    joystick.style.left = (joyCenterX - 70) + "px";
+    joystick.style.top = (joyCenterY - 70) + "px";
+    joystick.style.display = "block";
 });
 
-joystick.addEventListener("touchmove", (e) => {
+window.addEventListener("touchmove", (e) => {
     if (!joyActive) return;
 
     const t = e.touches[0];
-    const dx = t.clientX - joyStartX;
-    const dy = t.clientY - joyStartY;
+    const dx = t.clientX - joyCenterX;
+    const dy = t.clientY - joyCenterY;
 
-    // Limit stick movement
     const maxDist = 50;
     const dist = Math.min(maxDist, Math.hypot(dx, dy));
     const angle = Math.atan2(dy, dx);
@@ -1570,26 +1576,27 @@ joystick.addEventListener("touchmove", (e) => {
 
     stick.style.transform = `translate(${stickX}px, ${stickY}px)`;
 
-    // NORMALIZED INPUTS
-    const nx = stickX / maxDist; // -1 to 1
-    const ny = stickY / maxDist; // -1 to 1
+    // Normalized -1 to 1
+    const nx = stickX / maxDist;
+    const ny = stickY / maxDist;
 
-    // Convert joystick to your inputs
+    // Convert to your inputs
     inputs.left = nx < -0.3;
     inputs.right = nx > 0.3;
     inputs.up = ny < -0.3;
     inputs.down = ny > 0.3;
 });
 
-joystick.addEventListener("touchend", () => {
+window.addEventListener("touchend", () => {
     joyActive = false;
-    stick.style.transform = "translate(-50%, -50%)";
+    joystick.style.display = "none";
 
     inputs.left = false;
     inputs.right = false;
     inputs.up = false;
     inputs.down = false;
 });
+
 
 
 FreeBtn.addEventListener('click', () => {
@@ -1638,6 +1645,7 @@ window.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
 
 
 
