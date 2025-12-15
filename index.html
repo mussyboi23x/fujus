@@ -20,8 +20,28 @@
         }
         #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 24px; }
     </style>
+	<style>
+    .touch-zone {
+        position: fixed;
+        top: 0;
+        width: 50vw;
+        height: 100vh;
+        z-index: 9999;
+        touch-action: none;
+    }
+    #left-zone {
+        left: 0;
+    }
+    #right-zone {
+        right: 0;
+    }
+</style>
+
 </head>
 <body>
+
+<div id="left-zone" class="touch-zone"></div>
+<div id="right-zone" class="touch-zone"></div>
 
 <div id="menuOverlay">
     <div id="menuBox">
@@ -1474,6 +1494,45 @@ const botBtn = document.getElementById('1v1Btn')
 const settingsBtn = document.getElementById('settingsBtn');
 const quitBtn = document.getElementById('quitBtn');
 
+const leftZone = document.getElementById("left-zone");
+const rightZone = document.getElementById("right-zone");
+
+let leftTouch = false;
+let rightTouch = false;
+
+function updateMobileKeys() {
+    // Drive forward if either side is touched
+    keys['w'] = leftTouch || rightTouch;
+
+    // Steering
+    keys['a'] = leftTouch;
+    keys['d'] = rightTouch;
+}
+
+// Touch start
+leftZone.addEventListener("touchstart", () => {
+    leftTouch = true;
+    updateMobileKeys();
+});
+rightZone.addEventListener("touchstart", () => {
+    rightTouch = true;
+    updateMobileKeys();
+});
+
+// Touch end
+leftZone.addEventListener("touchend", () => {
+    leftTouch = false;
+    updateMobileKeys();
+});
+rightZone.addEventListener("touchend", () => {
+    rightTouch = false;
+    updateMobileKeys();
+});
+
+// Prevent scrolling
+leftZone.addEventListener("touchmove", e => e.preventDefault());
+rightZone.addEventListener("touchmove", e => e.preventDefault());
+
 FreeBtn.addEventListener('click', () => {
     menuOverlay.style.display = 'none';
     gameStarted = true;
@@ -1520,4 +1579,5 @@ window.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
 
