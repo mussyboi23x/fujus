@@ -1651,8 +1651,18 @@ botBtn.addEventListener('click', () => {
 
 
 settingsBtn.addEventListener('click', () => {
-    alert("Settings coming soon!");
+    const choice = confirm(
+        "Mobile Controls are currently " + 
+        (mobileControlsEnabled ? "ON" : "OFF") + 
+        "\n\nPress OK to toggle."
+    );
+
+    if (choice) {
+        mobileControlsEnabled = !mobileControlsEnabled;
+        updateMobileControlsVisibility();
+    }
 });
+
 
 quitBtn.addEventListener('click', () => {
     alert("Quitting game...");
@@ -1679,6 +1689,7 @@ window.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
 
 
 
