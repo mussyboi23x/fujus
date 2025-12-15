@@ -152,7 +152,10 @@
 
 <div id="info">
     <div id="score"><span style="color:#4488FF">BLUE: 0</span> - <span style="color:#FF8833">ORANGE: 0</span></div>
-    <div class="controls">WASD / ARROWS to Drive | <b>Q/E</b> for Air Roll | <b>SPACE (x2)</b> to Jump/Flip | <b>SHIFT</b> to Boost | <b>ENTER</b> to Switch Camera | R to Reset</div>
+    <div class="controls">
+        <b>KBM:</b> WASD / ARROWS to Drive | <b>Q/E</b> for Air Roll | <b>SPACE (x2)</b> to Jump/Flip | <b>SHIFT</b> to Boost | <b>ENTER</b> to Switch Camera | R to Reset<br>
+        <b>Controller:</b> Left Stick to Drive/Steer | <b>A/X</b> to Jump/Flip | <b>RT/R2</b> to Boost | <b>LB/RB</b> for Air Roll | <b>X/Square</b> to Switch Camera
+    </div>
     <div id="cameraMode">Camera: Car Cam</div>
 </div>
 <div id="loading">Loading Engine...</div>
@@ -200,6 +203,10 @@
     let botBody, botMesh;
     let gameMode = 'freeplay';
 	let mobileControlsEnabled = false;
+    
+    // NEW GLOBAL FOR GAMEPAD
+    let gamepad; 
+
 let botInputs = {
     up: false,
     down: false,
@@ -214,7 +221,7 @@ let inputs = {
     up: false, down: false, left: false, right: false, space: false, shift: false,
     q: false, e: false, enter: false,
     
-    // Analog Inputs (set by joystick handler, 0.0 to 1.0 or -1.0 to 1.0)
+    // Analog Inputs (set by joystick/gamepad handler, 0.0 to 1.0 or -1.0 to 1.0)
     driveAnalog: 0.0, // -1.0 (reverse) to 1.0 (forward)
     steerAnalog: 0.0, // -1.0 (left) to 1.0 (right)
     
@@ -306,8 +313,8 @@ let inputs = {
         window.addEventListener('keydown', (e) => handleKey(e, true));
         window.addEventListener('keyup', (e) => handleKey(e, false));
         
-        // TWEAK 4: Setup mobile controls
-        setupMobileControls();
+        setupMobileControls(); 
+        setupGamepadListeners(); // ADD GAMEPAD LISTENERS
         
         document.getElementById('loading').style.display = 'none';
     }
@@ -494,7 +501,7 @@ let inputs = {
         const shape = new CANNON.Box(new CANNON.Vec3(CAR_SIZE.w, CAR_SIZE.h, CAR_SIZE.l));
         carBody = new CANNON.Body({ mass: 150 * SCALE_FACTOR, material: physicsMaterials.object });    
         carBody.addShape(shape);
-        // TWEAK 2: Correct Player Car (Blue) spawn to -Z side
+        // Correct Player Car (Blue) spawn to -Z side
         carBody.position.set(0, 2, -FIELD_L * 0.3);
         carBody.linearDamping = 0.01;    
         carBody.angularDamping = 0.9;
@@ -539,7 +546,7 @@ function createBotCar() {
     });
 
     botBody.addShape(shape);
-    // TWEAK 2: Correct Bot Car (Orange) spawn to +Z side
+    // Correct Bot Car (Orange) spawn to +Z side
     botBody.position.set(0, 2, FIELD_L * 0.3);
     botBody.linearDamping = 0.01;
     botBody.angularDamping = 0.9;
@@ -580,7 +587,7 @@ function createBotCar() {
     scene.add(botMesh);
 }
 
-// TWEAK 3: Update controls to use analog input
+// Controls logic now mixes KBM, Mobile, and Gamepad inputs.
 function applyCarControls(body, controlInputs) {
     const isCarOnGround = body.position.y < (CAR_SIZE.h * 1.5);
     const forwardVector = new CANNON.Vec3(0, 0, -1);
@@ -590,10 +597,10 @@ function applyCarControls(body, controlInputs) {
     let driveFactor = 0; // -1.0 (reverse) to 1.0 (forward)
     
     if (Math.abs(controlInputs.driveAnalog) > 0.05) {
-        driveFactor = controlInputs.driveAnalog; // Use analog value
-        // The joystick gives -1.0 to 1.0, so use the raw value
+        driveFactor = controlInputs.driveAnalog; // Use analog value (Mobile or Gamepad)
+        // Analog drive is full speed (1.0) for forward, half speed (-0.5) for reverse
         if (driveFactor < 0) {
-            driveFactor *= 0.5; // Half speed for reverse (matching KBM down)
+            driveFactor *= 0.5; // Half speed for reverse
         }
     } else if (controlInputs.up) {
         driveFactor = 1.0; // Digital forward
@@ -623,9 +630,9 @@ function applyCarControls(body, controlInputs) {
         let steerFactor = 0; // -1.0 (left) to 1.0 (right)
         
         if (Math.abs(controlInputs.steerAnalog) > 0.05) {
-            steerFactor = controlInputs.steerAnalog; // Use analog value
+            steerFactor = controlInputs.steerAnalog; // Use analog value (Mobile or Gamepad)
         } else {
-            steerFactor = (controlInputs.left ? 1 : 0) - (controlInputs.right ? 1 : 0); // Digital value
+            steerFactor = (controlInputs.left ? 1 : 0) - (controlInputs.right ? 1 : 0); // Digital value (KBM)
         }
 
         if (steerFactor !== 0) {
@@ -700,16 +707,16 @@ function applyCarControls(body, controlInputs) {
 
     flipAxis.set(0, 0, 0);
 
-if (inputs.up) {                 // front flip
+if (inputs.up || inputs.driveAnalog > 0.5) {                 // front flip
     flipAxis.copy(r); // FLIPPED
     carBody.velocity.vadd(f.scale(-18), carBody.velocity);
-} else if (inputs.down) {          // back flip
+} else if (inputs.down || inputs.driveAnalog < -0.5) {          // back flip
     flipAxis.copy(l).scale(-1); // FLIPPED
     carBody.velocity.vadd(f.scale(14), carBody.velocity);
-} else if (inputs.right) {         // right flip
+} else if (inputs.right || inputs.steerAnalog > 0.5) {         // right flip
     flipAxis.copy(f); // FLIPPED
     carBody.velocity.vadd(r.scale(14), carBody.velocity);
-} else if (inputs.left) {          // left flip
+} else if (inputs.left || inputs.steerAnalog < -0.5) {          // left flip
     flipAxis.copy(d); // FLIPPED
     carBody.velocity.vadd(r.scale(-14), carBody.velocity);
 
@@ -800,7 +807,7 @@ if (inputs.up) {                 // front flip
     }
 
     function resetGame() {
-        // TWEAK 2: Correct Player Car (Blue) spawn to -Z side
+        // Correct Player Car (Blue) spawn to -Z side
         carBody.position.set(0, 2, -FIELD_L * 0.3);
         carBody.velocity.set(0, 0, 0);
         carBody.quaternion.set(0, 0, 0, 1);
@@ -815,7 +822,7 @@ if (inputs.up) {                 // front flip
         ballBody.angularVelocity.set(0, 0, 0);
 
         if (botBody) {
-             // TWEAK 2: Correct Bot Car (Orange) spawn to +Z side
+             // Correct Bot Car (Orange) spawn to +Z side
              botBody.position.set(0, 2, FIELD_L * 0.3);
              botBody.velocity.set(0, 0, 0);
              botBody.quaternion.set(0, 0, 0, 1);
@@ -832,9 +839,17 @@ if (inputs.up) {                 // front flip
         lastJumpTime = 0;
         hasDoubleJumped = false;
         
-        // Reset analog inputs on game reset
+        // Reset analog and digital inputs on game reset
         inputs.driveAnalog = 0.0;
         inputs.steerAnalog = 0.0;
+        inputs.up = false;
+        inputs.down = false;
+        inputs.left = false;
+        inputs.right = false;
+        inputs.space = false;
+        inputs.shift = false;
+        inputs.q = false;
+        inputs.e = false;
         
         gameState = 'playing';
         
@@ -943,6 +958,22 @@ function score(team) {
         if (inputs.right && inputs.D_aerialReady && !isSpeedCapped(rotatedUp, false)) {
             carBody.angularVelocity.vadd(rotatedUp.scale(AERIAL_ROTATION_RATE), carBody.angularVelocity);
         }
+        
+        // Analog Aerial Pitch/Yaw control (Left Stick when airborne, overrides digital)
+        if (gamepad) {
+            const pitch = inputs.driveAnalog; // Y-axis from stick
+            const yaw = inputs.steerAnalog; // X-axis from stick
+            
+            if (Math.abs(pitch) > 0.1) {
+                const pitchRate = pitch * AERIAL_ROTATION_RATE;
+                carBody.angularVelocity.vadd(rotatedRight.scale(-pitchRate), carBody.angularVelocity);
+            }
+            if (Math.abs(yaw) > 0.1) {
+                const yawRate = yaw * AERIAL_ROTATION_RATE;
+                carBody.angularVelocity.vadd(rotatedUp.scale(yawRate), carBody.angularVelocity);
+            }
+        }
+
 
         // Apply air resistance to rotation
         carBody.angularVelocity.scale(0.99, carBody.angularVelocity);
@@ -1136,75 +1167,6 @@ function updateBotAI() {
 }
 
 
-function animate() {
-    requestAnimationFrame(animate);
-    if(!gameStarted) return;
-
-    const delta = clock.getDelta();
-
-    if(gameState === 'replay') {
-        if(replayIndex < replayFrames.length){
-            const frame = replayFrames[replayIndex];
-            
-            // 1. Load Player Car (Index 0)
-            carBody.position.copy(frame.cars[0].pos);
-            carBody.quaternion.copy(frame.cars[0].quat);
-            
-            // 2. Load Ball
-            ballBody.position.copy(frame.ball.pos);
-            ballBody.quaternion.copy(frame.ball.quat);
-            
-            // 3. Load Bot Car (Index 1)
-            if (gameMode === 'bot1v1' && botBody && frame.cars.length > 1) {
-                botBody.position.copy(frame.cars[1].pos); // Bot is always index 1
-                botBody.quaternion.copy(frame.cars[1].quat);
-            }
-            
-            replayIndex++;
-            updateCamera(delta);
-        } else {
-            // End of replay, wait for timer
-            replayTimer -= delta;
-            updateCamera(delta);
-            if (replayTimer <= 0) {
-                resetGame();
-            }
-        }
-    } else {
-        updatePhysics();
-        checkGoal();
-        recordReplayFrame();
-
-        if (gameMode === 'bot1v1') {
-            updateBotAI();
-            applyCarControls(botBody, botInputs);
-        }
-        
-        applyCarControls(carBody, inputs);
-
-        const isCarOnGround = carBody.position.y < (CAR_SIZE.h * 1.5);
-        if (!isCarOnGround && !isFlipping) {
-            updateAerialControls();
-        } else {
-            // Apply damping after flip ends
-            carBody.angularDamping = 0.9;
-            hasDoubleJumped = false;
-        }
-
-        if (isFlipping) {
-            flipTimer -= delta;
-            if (flipTimer <= 0) {
-                isFlipping = false;
-            }
-        }
-        
-        updateCamera(delta);
-    }
-
-    renderer.render(scene, camera);
-}
-
-
 // Particle system for goal explosion
 let particleSystem;
 let particlesData = [];
@@ -1307,12 +1269,104 @@ function updateParticles() {
 // Global clock for delta time calculation
 const clock = new THREE.Clock();
 
+// --- GAMEPAD FUNCTIONS ---
+
+function setupGamepadListeners() {
+    window.addEventListener('gamepadconnected', (e) => {
+        // Only track the first connected gamepad for now
+        if (!gamepad) {
+            gamepad = e.gamepad;
+            console.log("Gamepad connected at index %d: %s. %d buttons, %d axes.",
+                gamepad.index, gamepad.id,
+                gamepad.buttons.length, gamepad.axes.length);
+        }
+    });
+
+    window.addEventListener('gamepaddisconnected', (e) => {
+        if (gamepad && gamepad.index === e.gamepad.index) {
+            gamepad = undefined;
+            console.log("Gamepad disconnected from index %d: %s",
+                e.gamepad.index, e.gamepad.id);
+            // Reset analog controls when gamepad disconnects
+            inputs.driveAnalog = 0.0;
+            inputs.steerAnalog = 0.0;
+        }
+    });
+}
+
+// Toggles digital/keyboard inputs
+let wasJumpPressed = false; 
+let wasCamPressed = false;
+
+function updateGamepad() {
+    if (!gamepad) return;
+
+    // Get fresh gamepad state (required for most browsers)
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    gamepad = gamepads[gamepad.index];
+
+    if (!gamepad) return;
+
+    // --- AXES (Analog Movement) ---
+    const AXIS_THRESHOLD = 0.1;
+    
+    // Left Stick X (Steering): Axis 0
+    const steer = gamepad.axes[0];
+    inputs.steerAnalog = (Math.abs(steer) > AXIS_THRESHOLD) ? steer : 0.0;
+
+    // Left Stick Y (Drive): Axis 1 (Inverted for forward/backward)
+    const drive = gamepad.axes[1];
+    inputs.driveAnalog = (Math.abs(drive) > AXIS_THRESHOLD) ? -drive : 0.0;
+
+    // --- BUTTONS (Digital Actions) ---
+    // Mapping is based on standard Xbox layout (A=0, B=1, X=2, Y=3, LB=4, RB=5, LT=6, RT=7)
+
+    // 1. Jump/Flip (A/X - Button 0)
+    const isJumpPressed = gamepad.buttons[0] ? gamepad.buttons[0].pressed : false;
+    
+    // Manual state handling to trigger the jump logic in the main loop (only on press down)
+    if (isJumpPressed && !wasJumpPressed) {
+        inputs.space = true;
+    } else if (!isJumpPressed && wasJumpPressed) {
+        inputs.space = false;
+    }
+    wasJumpPressed = isJumpPressed;
+
+    // 2. Boost (RT/R2 - Button 7)
+    // Use digital button 7 (some controllers use Axis 5 for analog RT, but for boost digital is fine)
+    inputs.shift = gamepad.buttons[7] ? gamepad.buttons[7].pressed : false;
+
+    // 3. Air Roll Left (LB/L1 - Button 4)
+    inputs.q = gamepad.buttons[4] ? gamepad.buttons[4].pressed : false;
+
+    // 4. Air Roll Right (RB/R1 - Button 5)
+    inputs.e = gamepad.buttons[5] ? gamepad.buttons[5].pressed : false;
+
+    // 5. Camera Toggle (X/Square - Button 2)
+    const isCamPressed = gamepad.buttons[2] ? gamepad.buttons[2].pressed : false;
+    if (isCamPressed && !wasCamPressed) {
+        // Trigger the camera toggle logic
+        cameraMode = (cameraMode === 'car') ? 'ball' : 'car';
+        document.getElementById('cameraMode').textContent = `Camera: ${cameraMode === 'car' ? 'Car Cam' : 'Ball Cam'}`;
+    }
+    wasCamPressed = isCamPressed;
+    
+    // 6. Pause (Start - Button 9)
+    if (gamepad.buttons[9] && gamepad.buttons[9].pressed) {
+        // Dispatch ESC key event to trigger the existing menu toggle logic
+        const escEvent = new KeyboardEvent("keydown", { key: "Escape" });
+        window.dispatchEvent(escEvent);
+    }
+}
+
+
 function animate() {
     requestAnimationFrame(animate);
     if(!gameStarted) return;
 
     const delta = clock.getDelta();
     updateParticles(); // Update particles every frame
+    updateGamepad();   // UPDATE GAMEPAD INPUTS
 
     if(gameState === 'replay') {
         if(replayIndex < replayFrames.length){
@@ -1424,7 +1478,6 @@ function recordReplayFrame() {
 }
 
 
-// TWEAK 4: Setup mobile controls function
 // --- MOBILE/JOYSTICK CONTROLS LOGIC ---
 
 function setupMobileControls() {
@@ -1526,7 +1579,7 @@ function setupMobileControls() {
     document.addEventListener('pointerup', endDrag);
     joystick.addEventListener('touchstart', startDrag);
     document.addEventListener('touchmove', moveDrag);
-    document.addEventListener('touchend', endDrag);
+    joystick.addEventListener('touchend', endDrag);
 }
 
 
