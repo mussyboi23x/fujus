@@ -531,7 +531,7 @@ function createBotCar() {
     });
 
     botBody.addShape(shape);
-    botBody.position.set(0, 2, -FIELD_L * 0.3); // Correct physics spawn
+    botBody.position.set(0, 2, FIELD_L * 0.3); // Correct physics spawn
     botBody.linearDamping = 0.01;
     botBody.angularDamping = 0.9;
     world.addBody(botBody);
@@ -772,7 +772,7 @@ if (inputs.up) {                 // front flip
     }
 
     function resetGame() {
-        carBody.position.set(0, 2, FIELD_L * 0.3);
+        carBody.position.set(0, 2, -FIELD_L * 0.3);
         carBody.velocity.set(0, 0, 0);
         carBody.quaternion.set(0, 0, 0, 1);
         carBody.angularVelocity.set(0, 0, 0);
@@ -786,7 +786,7 @@ if (inputs.up) {                 // front flip
         ballBody.angularVelocity.set(0, 0, 0);
 
         if (botBody) {
-             botBody.position.set(0, 2, -FIELD_L * 0.3);
+             botBody.position.set(0, 2, FIELD_L * 0.3);
              botBody.velocity.set(0, 0, 0);
              botBody.quaternion.set(0, 0, 0, 1);
              botBody.angularVelocity.set(0, 0, 0);
@@ -1688,3 +1688,4 @@ window.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
