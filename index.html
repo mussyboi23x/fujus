@@ -490,7 +490,7 @@ let botInputs = {
         carBody.linearDamping = 0.01; 
         carBody.angularDamping = 0.9;
         world.addBody(carBody);
-		const spawnZ = FIELD_L * 0.3;
+		const spawnZ = -FIELD_L * 0.3;
         carBody.position.set(0, 2, spawnZ);
 carBody.quaternion.setFromAxisAngle(
     new CANNON.Vec3(0, 1, 0),
@@ -1701,5 +1701,6 @@ window.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
 
 
