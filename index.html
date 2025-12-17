@@ -491,6 +491,10 @@ let botInputs = {
         carBody.linearDamping = 0.01; 
         carBody.angularDamping = 0.9;
         world.addBody(carBody);
+		const rot = new CANNON.Quaternion();
+		rot.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.PI);
+		carBody.quaternion = rot;
+
 
         carMesh = new THREE.Group();
         
@@ -776,6 +780,9 @@ if (inputs.up) {                 // front flip
         carBody.velocity.set(0, 0, 0);
         carBody.quaternion.set(0, 0, 0, 1);
         carBody.angularVelocity.set(0, 0, 0);
+		const rot = new CANNON.Quaternion();
+		rot.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.PI);
+		carBody.quaternion = rot;
 
         ballMesh.visible = true;
         ballBody.collisionFilterGroup = 1; // re-enable collisions
@@ -1688,3 +1695,4 @@ window.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
