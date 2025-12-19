@@ -103,7 +103,16 @@
     touch-action: none;
 }
 
-	
+#joystickZone {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 40vw;   /* adjust size */
+    height: 40vh;  /* adjust size */
+    /* background: rgba(255,0,0,0.1);  <-- enable to debug */
+    touch-action: none;
+}
+
 </style>
 
 </head>
@@ -111,7 +120,7 @@
 
 <div id="pauseBtn">II</div>
 
-
+<div id="joystickZone"></div>
 <div id="joystick" style="display:none;">
     <div id="stick"></div>
 </div>
@@ -1598,7 +1607,7 @@ let joyCenterY = 0;
 const joystick = document.getElementById("joystick");
 const stick = document.getElementById("stick");
 	
-window.addEventListener("touchstart", (e) => {
+joystickZone.addEventListener("touchstart", (e) => {
     if (!mobileControlsEnabled) return;
 
     const t = e.touches[0];
@@ -1613,7 +1622,8 @@ window.addEventListener("touchstart", (e) => {
     joystick.style.display = "block";
 });
 
-window.addEventListener("touchmove", (e) => {
+
+joystickZone.addEventListener("touchmove", (e) => {
     if (!joyActive || !mobileControlsEnabled) return;
 
     const t = e.touches[0];
@@ -1626,7 +1636,7 @@ window.addEventListener("touchmove", (e) => {
 
     const stickX = Math.cos(angle) * dist;
     const stickY = Math.sin(angle) * dist;
-    
+
     stick.style.left = (40 + stickX) + "px";
     stick.style.top = (40 + stickY) + "px";
 
@@ -1727,5 +1737,6 @@ window.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
 
 
